@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"github.com/gorilla/mux"
 	"encoding/json"
+	"github.com/joho/godotenv"
+	"os"
 )
 
 type BodyText struct {
@@ -14,6 +16,7 @@ type BodyText struct {
 }
 
 func main() {
+	godotenv.Load()
 	router := mux.NewRouter()
 	listeningPort := "55100"
 	listeningAddress := fmt.Sprintf("localhost:%s", listeningPort)
@@ -28,9 +31,17 @@ func summarise(w http.ResponseWriter, r *http.Request) {
 	quit(err)
 
 	var textBody BodyText
+	// passing in the memory address of textBody as json Unmarshal accepts pointer
 	err = json.Unmarshal(body, &textBody)
 	quit(err)
-	log.Println(textBody.Text)
+
+	getOpenAi(textBody.Text)
+}
+
+func getOpenAi(text string) {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	text = text + "\ntl;dr:"
+	
 }
 
 func quit(err error) {
