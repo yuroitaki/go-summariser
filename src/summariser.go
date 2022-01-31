@@ -1,18 +1,16 @@
 package main
 
 import (
-	"context"
+	// "context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"strings"
-	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
-	gogpt "github.com/sashabaranov/go-gpt3"
+	// gogpt "github.com/sashabaranov/go-gpt3"
 )
 
 type BodyText struct {
@@ -30,21 +28,13 @@ type JsonResponse struct {
 	TopP float32
 }
 
-var MAX_WORD int = 1000
-var MAX_TOKEN int = 500
-
-func main() {
-	godotenv.Load()
-	router := mux.NewRouter()
-	listeningPort := "55100"
-	listeningAddress := fmt.Sprintf("localhost:%s", listeningPort)
-
-	router.HandleFunc("/summariser", summarise).Methods(http.MethodPost)
-	log.Println("Summariser waiting for content...")
-	http.ListenAndServe(listeningAddress, router)
-}
+const (
+	MAX_WORD = 1000
+	MAX_TOKEN = 500
+)
 
 func summarise(w http.ResponseWriter, r *http.Request) {
+	godotenv.Load()
 	w.Header().Add("Content-Type", "application/json")
 
 	body, err := ioutil.ReadAll(r.Body)
@@ -77,22 +67,37 @@ func summarise(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 		return
 	}
+	log.Println(text, validatedBody)
 
-	summarisedText, err := runGPT3(text, validatedBody)
+	db, err := setUpDB(os.Getenv("POSTGRES_USER"), os.Getenv("POSTGRES_PASSWORD"), os.Getenv("POSTGRES_DB"))
 	if err != nil {
 		log.Println(err)
 		w.WriteHeader(500)
 		return
 	}
-
-	response := JsonResponse{
-		Summary: summarisedText,
-		Temperature: validatedBody.Temperature,
-		TopP: validatedBody.TopP,
-		Engine: validatedBody.Engine,
-		Text: text,
+	err = db.Ping()
+	if err != nil {
+		log.Println(err)
+		w.WriteHeader(500)
+		return
 	}
-	json.NewEncoder(w).Encode(response)
+	log.Printf("Successfully connected to %s db!", os.Getenv("POSTGRES_DB"))
+
+	// summarisedText, err := runGPT3(text, validatedBody)
+	// if err != nil {
+	// 	log.Println(err)
+	// 	w.WriteHeader(500)
+	// 	return
+	// }
+
+	// response := JsonResponse{
+	// 	Summary: summarisedText,
+	// 	Temperature: validatedBody.Temperature,
+	// 	TopP: validatedBody.TopP,
+	// 	Engine: validatedBody.Engine,
+	// 	Text: text,
+	// }
+	// json.NewEncoder(w).Encode(response)
 }
 
 func validateTextBody(textBody BodyText) (BodyText, error) {
@@ -128,21 +133,21 @@ func trimText(text string) string {
 	return trimmedText
 }
 
-func runGPT3(text string, validatedBody BodyText) (string, error) {
-	ctx := context.Background()
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	text = text + "\ntl;dr:"
+// func runGPT3(text string, validatedBody BodyText) (string, error) {
+// 	ctx := context.Background()
+// 	apiKey := os.Getenv("OPENAI_API_KEY")
+// 	text = text + "\ntl;dr:"
 	
-	client := gogpt.NewClient(apiKey)
-	req := gogpt.CompletionRequest{
-		Prompt: text,
-		MaxTokens: MAX_TOKEN,
-		Temperature: validatedBody.Temperature,
-		TopP: validatedBody.TopP,
-	}
-	resp, err := client.CreateCompletion(ctx, validatedBody.Engine, req)
-	if len(resp.Choices) == 0 {
-		return "", errors.New("API response error")
-	}
-	return resp.Choices[0].Text, err
-}
+// 	client := gogpt.NewClient(apiKey)
+// 	req := gogpt.CompletionRequest{
+// 		Prompt: text,
+// 		MaxTokens: MAX_TOKEN,
+// 		Temperature: validatedBody.Temperature,
+// 		TopP: validatedBody.TopP,
+// 	}
+// 	resp, err := client.CreateCompletion(ctx, validatedBody.Engine, req)
+// 	if len(resp.Choices) == 0 {
+// 		return "", errors.New("API response error")
+// 	}
+// 	return resp.Choices[0].Text, err
+// }
