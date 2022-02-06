@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"github.com/joho/godotenv"
+	"database/sql"
 	// gogpt "github.com/sashabaranov/go-gpt3"
 )
 
@@ -75,13 +76,16 @@ func summarise(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 		return
 	}
-	err = db.Ping()
-	if err != nil {
+	summary, err := getSummary(text, validatedBody, db)
+	if err == sql.ErrNoRows {
+		log.Println("No existing summary found")
+	} else if err != nil {
 		log.Println(err)
 		w.WriteHeader(500)
 		return
+	} else {
+		log.Println("Summary:", summary)
 	}
-	log.Printf("Successfully connected to %s db!", os.Getenv("POSTGRES_DB"))
 
 	// summarisedText, err := runGPT3(text, validatedBody)
 	// if err != nil {
