@@ -1,7 +1,7 @@
 package main
 
 import (
-	// "context"
+	"context"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
@@ -11,7 +11,8 @@ import (
 	"strings"
 	"github.com/joho/godotenv"
 	"database/sql"
-	// gogpt "github.com/sashabaranov/go-gpt3"
+	"fmt"
+	gogpt "github.com/sashabaranov/go-gpt3"
 )
 
 type BodyText struct {
@@ -76,32 +77,40 @@ func summarise(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 		return
 	}
-	summary, err := getSummary(text, validatedBody, db)
+
+	summaryIdString := fmt.Sprintf("%s%f%f%s", text, validatedBody.Temperature, validatedBody.TopP, validatedBody.Engine)
+	var summarisedText string
+	summarisedText, err = getSummary(summaryIdString, db)
 	if err == sql.ErrNoRows {
 		log.Println("No existing summary found")
+		summarisedText, err = runGPT3(text, validatedBody)
+		if err != nil {
+			log.Println(err)
+			w.WriteHeader(500)
+			return
+		}
+		err = insertSummary(text, validatedBody, summarisedText, summaryIdString, db)
+		if err != nil {
+			log.Println(err)
+			w.WriteHeader(500)
+			return
+		}
 	} else if err != nil {
 		log.Println(err)
 		w.WriteHeader(500)
 		return
 	} else {
-		log.Println("Summary:", summary)
+		log.Println("Summary found from DB:", summarisedText)
 	}
 
-	// summarisedText, err := runGPT3(text, validatedBody)
-	// if err != nil {
-	// 	log.Println(err)
-	// 	w.WriteHeader(500)
-	// 	return
-	// }
-
-	// response := JsonResponse{
-	// 	Summary: summarisedText,
-	// 	Temperature: validatedBody.Temperature,
-	// 	TopP: validatedBody.TopP,
-	// 	Engine: validatedBody.Engine,
-	// 	Text: text,
-	// }
-	// json.NewEncoder(w).Encode(response)
+	response := JsonResponse{
+		Summary: summarisedText,
+		Temperature: validatedBody.Temperature,
+		TopP: validatedBody.TopP,
+		Engine: validatedBody.Engine,
+		Text: text,
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func validateTextBody(textBody BodyText) (BodyText, error) {
@@ -137,21 +146,22 @@ func trimText(text string) string {
 	return trimmedText
 }
 
-// func runGPT3(text string, validatedBody BodyText) (string, error) {
-// 	ctx := context.Background()
-// 	apiKey := os.Getenv("OPENAI_API_KEY")
-// 	text = text + "\ntl;dr:"
+func runGPT3(text string, validatedBody BodyText) (string, error) {
+	log.Println("Calling GPT3 API...")
+	ctx := context.Background()
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	text = text + "\ntl;dr:"
 	
-// 	client := gogpt.NewClient(apiKey)
-// 	req := gogpt.CompletionRequest{
-// 		Prompt: text,
-// 		MaxTokens: MAX_TOKEN,
-// 		Temperature: validatedBody.Temperature,
-// 		TopP: validatedBody.TopP,
-// 	}
-// 	resp, err := client.CreateCompletion(ctx, validatedBody.Engine, req)
-// 	if len(resp.Choices) == 0 {
-// 		return "", errors.New("API response error")
-// 	}
-// 	return resp.Choices[0].Text, err
-// }
+	client := gogpt.NewClient(apiKey)
+	req := gogpt.CompletionRequest{
+		Prompt: text,
+		MaxTokens: MAX_TOKEN,
+		Temperature: validatedBody.Temperature,
+		TopP: validatedBody.TopP,
+	}
+	resp, err := client.CreateCompletion(ctx, validatedBody.Engine, req)
+	if len(resp.Choices) == 0 {
+		return "", errors.New("API response error")
+	}
+	return resp.Choices[0].Text, err
+}
